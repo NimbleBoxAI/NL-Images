@@ -1,6 +1,7 @@
-import os
 from PIL import Image
 import streamlit as st
+
+from utils import display_image_grid
 
 # this caches the output to store the output and not call this function again
 # and again preventing time wastage. `allow_output_mutation = True` tells the
@@ -9,17 +10,20 @@ import streamlit as st
 # https://docs.streamlit.io/en/stable/api.html#streamlit.cache
 @st.cache(allow_output_mutation = True)
 def get_cross_modal_search_models():
-    from model import CLIP
+	from model import CLIP
 
-    return {'CLIP' : CLIP()}
+	return {'CLIP' : CLIP()}
 
 # load all the models before the app starts
 MODELS = get_cross_modal_search_models()
 
 st.write('''
-# Cross Modal Search
+# NL-Images
 There are different models available for performing Cross Modal Search:
-- CLIP: CLIP (Contrastive Language-Image Pre-Training) is a neural network trained on a variety of (image, text) pairs. It can be instructed in natural language to predict the most relevant text snippet, given an image. 
+- CLIP: CLIP (Contrastive Language-Image Pre-Training) \
+is a neural network trained on a variety of (image, text) pairs. \
+It can be instructed in natural language to predict the most \
+relevant text snippet, given an image.
 ''')
 
 model_name = st.sidebar.selectbox(
@@ -28,32 +32,27 @@ model_name = st.sidebar.selectbox(
 )
 
 if model_name != "CLIP":
-    st.write("Use `CLIP` model!")
-    model = MODELS['CLIP']
+	st.write("Use `CLIP` model!")
+	model = MODELS['CLIP']
 
 if model_name == "CLIP":
+	st.write("### `CLIP` Model")
+	st.write("Please upload images and write text of your choice")
+	st.write("Note: Write each description in a new line")
+	model = MODELS['CLIP']
 
-    st.write("### `CLIP` Model")
-    st.write("Please upload 2 images and 1 text of your choice")
-    model = MODELS['CLIP']
+images = st.file_uploader("Images", accept_multiple_files = True, type = ['png', 'jpg'])
 
+if len(images) != 0:
+	images = [Image.open(img).convert('RGB') for img in images]
+	image_grid = display_image_grid(images)
+	st.image(image_grid)
 
-IMG_SIZE = (224, 224) 
+default_ = "a person looking at a camera on a tripod \na apple on the table\na garden of sunflowers"
 
-img1 = st.file_uploader("Upload First Image", type = ['png', 'jpg'])
-if img1 is not None:
-    img1 = Image.open(img1).convert('RGB')
-    resized_img1 = img1.resize(IMG_SIZE)
-    st.image(resized_img1, caption = 'Uploaded First Image.')
-img2 = st.file_uploader("Upload Second Image", type = ['png', 'jpg'])
-if img2 is not None:
-    img2 = Image.open(img2).convert('RGB')
-    resized_img2 = img2.resize(IMG_SIZE)
-    st.image(resized_img2, caption = 'Uploaded Second Image.')
+text = st.text_area("Text", value = default_, key = "Text")
+text = text.splitlines()
 
-default_ = "a person looking at a camera on a tripod"
-description = st.text_input("Description", value = default_, key = "description")
-
-if st.button("Evaluate"):
-    data = model.eval(img1, img2, description)
-    st.write(data)
+if st.button("Predict"):
+	output = model.eval(images, text)
+	st.write(output)
