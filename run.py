@@ -10,9 +10,9 @@ from utils import display_image_grid
 # https://docs.streamlit.io/en/stable/api.html#streamlit.cache
 @st.cache(allow_output_mutation = True)
 def get_cross_modal_search_models():
-	from model import CLIP
+  from model import CLIP
 
-	return {'CLIP' : CLIP()}
+  return {'CLIP' : CLIP()}
 
 # load all the models before the app starts
 MODELS = get_cross_modal_search_models()
@@ -32,21 +32,21 @@ model_name = st.sidebar.selectbox(
 )
 
 if model_name != "CLIP":
-	st.write("Use `CLIP` model!")
-	model = MODELS['CLIP']
+  st.write("Use `CLIP` model!")
+  model = MODELS['CLIP']
 
 if model_name == "CLIP":
-	st.write("### `CLIP` Model")
-	st.write("Please upload images and write text of your choice")
-	st.write("Note: Write each description in a new line")
-	model = MODELS['CLIP']
+  st.write("### `CLIP` Model")
+  st.write("Please upload images and write text of your choice")
+  st.write("Note: Write each description in a new line")
+  model = MODELS['CLIP']
 
 images = st.file_uploader("Images", accept_multiple_files = True, type = ['png', 'jpg'])
 
 if len(images) != 0:
-	images = [Image.open(img).convert('RGB') for img in images]
-	image_grid = display_image_grid(images)
-	st.image(image_grid)
+  images = [Image.open(img).convert('RGB') for img in images]
+  image_grid = display_image_grid(images)
+  st.image(image_grid)
 
 default_ = "a person looking at a camera on a tripod \na apple on the table\na garden of sunflowers"
 
@@ -54,5 +54,5 @@ text = st.text_area("Text", value = default_, key = "Text")
 text = text.splitlines()
 
 if st.button("Predict"):
-	output = model.eval(images, text)
-	st.write(output)
+  output = model.eval(images, text)
+  st.write(output)
