@@ -59,10 +59,8 @@ transpose_flag = st.radio('Priority', ['Image', 'Text'])
 
 if len(images) == 1:
   transpose_flag = True
-
 elif len(text) == 1:
   transpose_flag = False
-
 else:
   transpose_flag = True if transpose_flag == 'Image' else False
 
