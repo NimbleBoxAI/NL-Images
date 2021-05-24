@@ -30,7 +30,7 @@ given images and textual descriptions.
 
 model_name = st.sidebar.selectbox(
   'Please select your model',
-  ["CLIP"]
+  ["None", "CLIP"]
 )
 
 if model_name != "CLIP":
