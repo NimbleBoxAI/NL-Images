@@ -2,12 +2,12 @@ import io
 import os
 import numpy as np
 from PIL import Image
+import xxhash
 import torch
 import torchvision
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, transforms
 import seaborn as sns
 import matplotlib.pyplot as plt
-
 
 def get_image_grid(images):
 
@@ -28,6 +28,34 @@ def get_image_grid(images):
   image_grid = transform(image_grid)
 
   return image_grid
+
+
+def get_output(scores, images, text, flag):
+
+  count_images = len(images)
+  count_text = len(text)
+
+  scores = np.round(scores.cpu().numpy(), 2)
+  scores = scores.T if flag else scores
+
+  fig = plt.figure()
+
+  for i, image in enumerate(images):
+    plt.imshow(np.asarray(image), extent=(
+      i, i + 1.0, -1.0, -0.2), origin="lower")
+
+  sns.heatmap(scores, annot=scores, cbar_kws={
+    'label': 'Probaility'}, cmap='viridis')
+
+  plt.xticks([])
+  plt.yticks(np.arange(count_text) + 0.5, text, rotation=0, fontsize=10)
+  plt.xlabel('Images')
+  plt.ylabel('Text')
+  plt.xlim([0.0, count_images + 0.5])
+  plt.ylim([count_text + 0.5, -1.0])
+  plt.title('Predictions', fontweight='bold')
+
+  return fig
 
 
 def preprocess_images(images, input_resolution, device):
@@ -82,29 +110,39 @@ def similarity_score(image_features, text_features, flag):
 
   return probs
 
-def get_output(scores, images, text, flag):
 
-  count_images = len(images)
-  count_text = len(text)
+def get_images(images):
 
-  scores = np.round(scores.cpu().numpy(), 2)
-  scores = scores.T if flag else scores
+  final_images = {}
 
-  fig = plt.figure()
+  for image in images:
 
-  for i, image in enumerate(images):
-    plt.imshow(np.asarray(image), extent=(
-      i, i + 1.0, -1.0, -0.2), origin="lower")
+    img = Image.open(image, mode = 'r')
+    buffer = io.BytesIO()
+    img.save(buffer, format = img.format)
+    img = buffer.getvalue()
 
-  sns.heatmap(scores, annot=scores, cbar_kws={
-    'label': 'Probaility'}, cmap='viridis')
+    key = str(xxhash.xxh64(img).hexdigest()) + '.png'
 
-  plt.xticks([])
-  plt.yticks(np.arange(count_text) + 0.5, text, rotation=0, fontsize=10)
-  plt.xlabel('Images')
-  plt.ylabel('Text')
-  plt.xlim([0.0, count_images + 0.5])
-  plt.ylim([count_text + 0.5, -1.0])
-  plt.title('Predictions', fontweight='bold')
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    cache_folder_path = os.path.join(dir_path, 'cache_images')
+    cache_file_path = os.path.join(cache_folder_path, key)
 
-  return fig
+    if not os.path.exists(cache_folder_path):
+      os.mkdir(cache_folder_path)
+
+    if key in os.listdir(cache_folder_path):
+
+      image = Image.open(cache_file_path).convert('RGB')
+      final_images[key] = image
+
+    else:
+
+      image = Image.open(image).convert('RGB')
+      image.save(cache_file_path)
+      final_images[key] = image
+
+  images = list(final_images.values())
+  image_grid = get_image_grid(images)
+
+  return images, image_grid

@@ -1,7 +1,7 @@
 from PIL import Image
 import streamlit as st
 
-from clip.utils import get_image_grid
+from clip.utils import get_images
 
 # this caches the output to store the output and not call this function again
 # and again preventing time wastage. `allow_output_mutation = True` tells the
@@ -47,8 +47,7 @@ images = st.file_uploader(
   "Images", accept_multiple_files=True, type=['png', 'jpg'])
 
 if len(images) != 0:
-  images = [Image.open(img).convert('RGB') for img in images]
-  image_grid = get_image_grid(images)
+  images, image_grid = get_images(images)
   st.image(image_grid)
 
 default_ = "a person stuck in traffic\na apple on the table\na garden of sunflowers"
