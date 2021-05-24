@@ -125,7 +125,7 @@ def get_images(images):
     key = str(xxhash.xxh64(img).hexdigest()) + '.png'
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    cache_folder_path = os.path.join(dir_path, 'cache_images')
+    cache_folder_path = os.path.join(dir_path, '.cache_images')
     cache_file_path = os.path.join(cache_folder_path, key)
 
     if not os.path.exists(cache_folder_path):
