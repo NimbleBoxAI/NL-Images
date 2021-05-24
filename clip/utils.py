@@ -30,13 +30,13 @@ def get_image_grid(images):
   return image_grid
 
 
-def get_output(scores, images, text, flag):
+def get_output(scores, images, text, transpose_flag):
 
   count_images = len(images)
   count_text = len(text)
 
   scores = np.round(scores.cpu().numpy(), 2)
-  scores = scores.T if flag else scores
+  scores = scores.T if transpose_flag else scores
 
   fig = plt.figure()
 
@@ -96,12 +96,12 @@ def preprocess_text(text, tokenizer, context_length, device):
   return preprocessed_text
 
 
-def similarity_score(image_features, text_features, flag):
+def similarity_score(image_features, text_features, transpose_flag):
 
   image_features /= image_features.norm(dim=-1, keepdim=True)
   text_features /= text_features.norm(dim=-1, keepdim=True)
 
-  if flag:
+  if transpose_flag:
     similarity_matrix = image_features @ text_features.T
   else:
     similarity_matrix = text_features @ image_features.T

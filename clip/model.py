@@ -34,7 +34,7 @@ class CLIP:
     self.context_length = self.model.context_length.item()
     self.tokenizer = SimpleTokenizer(vocab_path)
 
-  def eval(self, images, text, flag):
+  def eval(self, images, text, transpose_flag):
 
     input_images = preprocess_images(images, self.input_resolution, self.device)
     input_text = preprocess_text(text, self.tokenizer, self.context_length, self.device)
@@ -44,7 +44,7 @@ class CLIP:
       text_features = self.model.encode_text(input_text)
 
 
-    result = similarity_score(image_features, text_features, flag)
-    output = get_output(result, images, text, flag)
+    result = similarity_score(image_features, text_features, transpose_flag)
+    output = get_output(result, images, text, transpose_flag)
 
     return output
