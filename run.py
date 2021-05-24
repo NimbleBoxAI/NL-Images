@@ -55,19 +55,19 @@ default_ = "a person stuck in traffic\na apple on the table\na garden of sunflow
 text = st.text_area("Text", value=default_, key="Text")
 text = text.splitlines()
 
-flag = st.radio('Priority', ['Image', 'Text'])
+transpose_flag = st.radio('Priority', ['Image', 'Text'])
 
 if len(images) == 1:
-	flag = True
+  transpose_flag = True
 
 elif len(text) == 1:
-	flag = False
+  transpose_flag = False
 
 else:
-	flag = True if flag == 'Image' else False
+  transpose_flag = True if transpose_flag == 'Image' else False
 
 
 if st.button("Predict"):
   with st.spinner('Predicting...'):
-    output = model.eval(images, text, flag)
+    output = model.eval(images, text, transpose_flag)
   st.write(output)
