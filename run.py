@@ -1,34 +1,36 @@
 from PIL import Image
 import streamlit as st
 
-from utils import display_image_grid
+from clip.utils import get_image_grid
 
 # this caches the output to store the output and not call this function again
 # and again preventing time wastage. `allow_output_mutation = True` tells the
 # function to not hash the output of this function and we can get away with it
 # because no arguments are passed through this.
 # https://docs.streamlit.io/en/stable/api.html#streamlit.cache
-@st.cache(allow_output_mutation = True)
-def get_cross_modal_search_models():
-  from model import CLIP
 
-  return {'CLIP' : CLIP()}
+@st.cache(allow_output_mutation=True, show_spinner=False)
+def get_cross_modal_search_models():
+  from clip.model import CLIP
+
+  return {'CLIP': CLIP()}
 
 # load all the models before the app starts
-MODELS = get_cross_modal_search_models()
+with st.spinner('Downloading and Loading Model with Vocabulary...'):
+  MODELS = get_cross_modal_search_models()
 
 st.write('''
 # NL-Images
-There are different models available for performing Cross Modal Search:
+CLIP is used to perform Cross Modal Search:
 - CLIP: CLIP (Contrastive Language-Image Pre-Training) \
-is a neural network trained on a variety of (image, text) pairs. \
-It can be instructed in natural language to predict the most \
-relevant text snippet, given an image.
+is a neural network that consists of a image encoder and a \
+text encoder. It predicts the similarity between the \
+given images and textual descriptions.
 ''')
 
 model_name = st.sidebar.selectbox(
   'Please select your model',
-  ["CLIP", "VSE"]
+  ["CLIP"]
 )
 
 if model_name != "CLIP":
@@ -41,18 +43,32 @@ if model_name == "CLIP":
   st.write("Note: Write each description in a new line")
   model = MODELS['CLIP']
 
-images = st.file_uploader("Images", accept_multiple_files = True, type = ['png', 'jpg'])
+images = st.file_uploader(
+  "Images", accept_multiple_files=True, type=['png', 'jpg'])
 
 if len(images) != 0:
   images = [Image.open(img).convert('RGB') for img in images]
-  image_grid = display_image_grid(images)
+  image_grid = get_image_grid(images)
   st.image(image_grid)
 
-default_ = "a person looking at a camera on a tripod \na apple on the table\na garden of sunflowers"
+default_ = "a person stuck in traffic\na apple on the table\na garden of sunflowers"
 
-text = st.text_area("Text", value = default_, key = "Text")
+text = st.text_area("Text", value=default_, key="Text")
 text = text.splitlines()
 
+flag = st.radio('Priority', ['Image', 'Text'])
+
+if len(images) == 1:
+	flag = True
+
+elif len(text) == 1:
+	flag = False
+
+else:
+	flag = True if flag == 'Image' else False
+
+
 if st.button("Predict"):
-  output = model.eval(images, text)
+  with st.spinner('Predicting...'):
+    output = model.eval(images, text, flag)
   st.write(output)
