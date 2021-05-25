@@ -1,4 +1,3 @@
-from PIL import Image
 import streamlit as st
 
 from clip.utils import get_images
@@ -8,12 +7,12 @@ from clip.utils import get_images
 # function to not hash the output of this function and we can get away with it
 # because no arguments are passed through this.
 # https://docs.streamlit.io/en/stable/api.html#streamlit.cache
-
 @st.cache(allow_output_mutation=True, show_spinner=False)
 def get_cross_modal_search_models():
-  from clip.model import CLIP
-
-  return {'CLIP': CLIP()}
+  from clip.clip import CLIP
+  return {
+    'CLIP': CLIP()
+  }
 
 # load all the models before the app starts
 with st.spinner('Downloading and Loading Model with Vocabulary...'):
@@ -22,15 +21,14 @@ with st.spinner('Downloading and Loading Model with Vocabulary...'):
 st.write('''
 # NL-Images
 CLIP is used to perform Cross Modal Search:
-- CLIP: CLIP (Contrastive Language-Image Pre-Training) \
-is a neural network that consists of a image encoder and a \
-text encoder. It predicts the similarity between the \
-given images and textual descriptions.
+- CLIP: CLIP (Contrastive Language-Image Pre-Training) is a neural network that
+consists of a image encoder and a text encoder. It predicts the similarity between
+the given images and textual descriptions.
 ''')
 
 model_name = st.sidebar.selectbox(
-  'Please select your model',
-  ["None", "CLIP"]
+  'Please select your app',
+  ["CLIP"]
 )
 
 if model_name != "CLIP":
@@ -43,27 +41,26 @@ if model_name == "CLIP":
   st.write("Note: Write each description in a new line")
   model = MODELS['CLIP']
 
-images = st.file_uploader(
-  "Images", accept_multiple_files=True, type=['png', 'jpg'])
+images = st.file_uploader("Images", accept_multiple_files=True, type=['png', 'jpg'])
 
 if len(images) != 0:
   images, image_grid = get_images(images)
   st.image(image_grid)
 
 default_ = "a person stuck in traffic\na apple on the table\na garden of sunflowers"
-
 text = st.text_area("Text", value=default_, key="Text")
 text = text.splitlines()
 
+# `transpose_flag` tells against which input, should softmax be calculated
+# ie. if transpose_flag = False -> sum(text[i]) == 1 but sum(images[i]) != 1
+# ie. if transpose_flag = True  -> sum(text[i]) != 1 but sum(images[i]) == 1
 transpose_flag = st.radio('Priority', ['Image', 'Text'])
-
 if len(images) == 1:
   transpose_flag = True
 elif len(text) == 1:
   transpose_flag = False
 else:
   transpose_flag = True if transpose_flag == 'Image' else False
-
 
 if st.button("Predict"):
   with st.spinner('Predicting...'):
