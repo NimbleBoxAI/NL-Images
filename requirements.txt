@@ -1,0 +1,10 @@
+numpy
+Pillow
+ftfy
+regex
+xxhash
+torch
+torchvision
+seaborn
+matplotlib
+streamlit
