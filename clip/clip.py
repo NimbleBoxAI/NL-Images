@@ -29,10 +29,10 @@ from clip.utils import preprocess_images, preprocess_text, similarity_score, get
 
 # fixed
 _MODELS = {
-    "RN50": "https://openaipublic.azureedge.net/clip/models/afeb0e10f9e5a86da6080e35cf09123aca3b358a0c3e3b6c78a7b63bc04b6762/RN50.pt",
-    "RN101": "https://openaipublic.azureedge.net/clip/models/8fa8567bab74a42d41c5915025a8e4538c3bdbe8804a470a72f30b0d94fab599/RN101.pt",
-    "RN50x4": "https://openaipublic.azureedge.net/clip/models/7e526bd135e493cef0776de27d5f42653e6b4c8bf9e0f653bb11773263205fdd/RN50x4.pt",
-    "ViT-B/32": "https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
+  "RN50": "https://openaipublic.azureedge.net/clip/models/afeb0e10f9e5a86da6080e35cf09123aca3b358a0c3e3b6c78a7b63bc04b6762/RN50.pt",
+  "RN101": "https://openaipublic.azureedge.net/clip/models/8fa8567bab74a42d41c5915025a8e4538c3bdbe8804a470a72f30b0d94fab599/RN101.pt",
+  "RN50x4": "https://openaipublic.azureedge.net/clip/models/7e526bd135e493cef0776de27d5f42653e6b4c8bf9e0f653bb11773263205fdd/RN50x4.pt",
+  "ViT-B/32": "https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
 }
 _VOCAB_PATH = 'https://openaipublic.azureedge.net/clip/bpe_simple_vocab_16e6.txt.gz'
 
@@ -150,7 +150,8 @@ class CLIP:
   def n_images(self):
     return self.emb.shape[0] if self.emb is not None else 0
 
-
+  
+  @torch.no_grad()
   def text_to_image_similarity(self, images: list, text: list, transpose_flag: bool):
     """This is the implementation of n-text to m-images similarity checking
     just like how CLIP was intended to be used.
@@ -165,9 +166,8 @@ class CLIP:
     """
     input_images = preprocess_images(images, self.input_resolution, self.device)
     input_text = preprocess_text(text, self.tokenizer, self.context_length, self.device)
-    with torch.no_grad():
-      image_features = self.model.encode_image(input_images)
-      text_features = self.model.encode_text(input_text)
+    image_features = self.model.encode_image(input_images)
+    text_features = self.model.encode_text(input_text)
     result = similarity_score(image_features, text_features, transpose_flag)
     output = get_output(result, images, text, transpose_flag)
 
@@ -185,8 +185,16 @@ class CLIP:
       images (list): return list of iamge
     """
     # get the text features
-    input_text = preprocess_text(text, self.tokenizer, self.context_length, self.device)
-    text_features = self.model.encode_text(input_text).numpy()[-1:]
+    input_tokens = [
+      self.tokenizer.encoder['<|startoftext|>'],
+      *self.tokenizer.encode(text),
+      self.tokenizer.encoder['<|endoftext|>']
+    ]
+    input_tokens = input_tokens + [0 for _ in range(self.context_length - len(input_tokens))]
+    input_tokens = torch.Tensor(input_tokens).long().unsqueeze(0)
+    text_features = self.model.encode_text(input_tokens)
+    text_features /= text_features.norm(dim=-1, keepdim=True)
+    text_features = text_features.numpy()
 
     # score using dot-product and load the images requires
     # note that we shift the selection by 1 because 0 is the image itself
@@ -216,7 +224,9 @@ class CLIP:
     _hash = Hashlib.sha256(image.tobytes())
     if _hash not in self.keys:
       out = prepare_images([image], self.input_resolution).to(self.device)
-      out = self.model.encode_image(out).cpu().numpy()
+      out = self.model.encode_image(out).cpu()
+      out /= out.norm(dim=-1, keepdim=True)
+      out = out.numpy()
       # this looks like a new image, store it
       self.upate_emb([image], [_hash], [out])
     else:
@@ -255,7 +265,9 @@ class CLIP:
     # get the tensors after processing
     opened_images = [Image.open(i) for i in all_i]
     out = prepare_images(opened_images, self.input_resolution)
-    out = self.model.encode_image(out).numpy()
+    out = self.model.encode_image(out)
+    out /= out.norm(dim=-1, keepdim=True)
+    out = out.numpy()
 
     # update and store the new images and hashes
     self.upate_emb(opened_images, all_h, out)

@@ -82,14 +82,17 @@ def preprocess_text(text, tokenizer, context_length, device):
 
   text_tokens = [tokenizer.encode("This is " + t) for t in text]
 
-  text_input = torch.zeros(
-    len(text_tokens), context_length, dtype=torch.long)
+  text_input = torch.zeros(len(text_tokens), context_length, dtype=torch.long)
   start_token = tokenizer.encoder['<|startoftext|>']
   end_token = tokenizer.encoder['<|endoftext|>']
 
-  for i, tokens in enumerate(text_tokens):
-    tokens = [start_token] + tokens + [end_token]
-    text_input[i, : len(tokens)] = torch.tensor(tokens)
+  if isinstance(text, list):
+    for i, tokens in enumerate(text_tokens):
+      tokens = [start_token] + tokens + [end_token]
+      text_input[i, : len(tokens)] = torch.tensor(tokens)
+  else:
+    tokens = [start_token] + text_tokens + [end_token]
+    text_input = torch.Tensor(tokens).long()
 
   preprocessed_text = text_input.to(device)
 
@@ -155,7 +158,7 @@ def prepare_images(images, out_res):
     img = img.convert('RGB')
     res = min(img.size)
     out = TF.center_crop(img, (res, res))
-    out = TF.resize(img, (out_res, out_res))
+    out = TF.resize(out, (out_res, out_res))
     out = TF.to_tensor(out).unsqueeze(0)
     all_image.append(out)
   return torch.cat(all_image, dim = 0)
