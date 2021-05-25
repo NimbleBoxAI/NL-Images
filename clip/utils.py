@@ -5,7 +5,7 @@ from PIL import Image
 import xxhash
 import torch
 import torchvision
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, transforms
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, transforms, functional as TF
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -146,3 +146,16 @@ def get_images(images):
   image_grid = get_image_grid(images)
 
   return images, image_grid
+
+
+def prepare_images(images, out_res):
+  all_image = []
+  for img in images:
+    # PNGs are RGBA and JPGs are RGB, fix at RGB
+    img = img.convert('RGB')
+    res = min(img.size)
+    out = TF.center_crop(img, (res, res))
+    out = TF.resize(img, (out_res, out_res))
+    out = TF.to_tensor(out).unsqueeze(0)
+    all_image.append(out)
+  return torch.cat(all_image, dim = 0)

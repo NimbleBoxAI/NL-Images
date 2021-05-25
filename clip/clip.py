@@ -16,6 +16,8 @@ except ImportError as e:
 
 import os
 import subprocess
+
+from PIL import Image
 import torch
 
 import numpy as np
@@ -23,7 +25,7 @@ import pickle
 
 from clip.model import build_model
 from clip.tokenizer import SimpleTokenizer
-from clip.utils import preprocess_images, preprocess_text, similarity_score, get_output
+from clip.utils import preprocess_images, preprocess_text, similarity_score, get_output, prepare_images
 
 # fixed
 _MODELS = {
@@ -43,6 +45,19 @@ class CLIP:
     image_cache_folder = ".cache_images",
     jit = False,
   ):
+    """CLIP model wrapper.
+
+    Args:
+      image_model (str, optional): Model name, one of `"RN50", "RN101", "RN50x4", "ViT-B/32"`.
+        Defaults to "RN50".
+      model_cache_folder (str, optional): folder with weights and vocab file.
+        Defaults to ".cache_model".
+      image_cache_folder (str, optional): folder with `latents.npy` and `image_keys.p`.
+        Defaults to ".cache_images".
+      jit (bool, optional): [BUG] to load the model as jit script.
+        Defaults to False.
+    """
+
     # note that this is a simple wget call to get the files, this not take into
     # account the corruption of file that can happen during the transfer by checksum
     # if you find any issue during download we recommend looking at the source code:
@@ -79,23 +94,61 @@ class CLIP:
     # now we check if there already exists a cache folder and if there is we will load
     # the embeddings for images as well
     icache = os.path.join(folder(__file__), image_cache_folder)
-    os.path.makedirs(icache, exist_ok=True)
+    os.makedirs(icache, exist_ok=True)
     emb_path = os.path.join(icache, "latents.npy")
     f_keys = os.path.join(icache, "image_keys.p")
     if not os.path.exists(emb_path):
       print("Embeddings path not found, upload images to create embeddings")
       emb = None
-      keys = None
+      keys = {}
     else:
       emb = np.load(emb_path)
-      with open(f_keys, "rb") as f:
+      with open(f_keys, "rb") as f: 
         keys = pickle.load(f)
-    self.emb = emb # emb mat
-    self.keys = keys # hash
-    self.new_embs = {} # hash: emb
+      print("Loaded", emb.shape, "embeddings")
+      print("Loaded", len(keys), "keys")
 
-  def add_new_emb(self, ):
-    pass
+    self.icache = icache
+    self.emb_path = emb_path
+    self.f_keys = f_keys
+    self.emb = emb # emb mat
+    self.keys = keys # hash: idx
+    self.idx_keys = {v:k for k, v in keys.items()}
+
+
+  def upate_emb(self, all_i: list, all_h: list, all_emb: list):
+    """Update the embeddings, keys and cache images
+
+    Args:
+        all_i (list): list 
+        all_h (list): [description]
+        all_emb (list): [description]
+    """
+    # update the keys
+    self.keys.update({k:i+len(self.keys) for i,k in enumerate(all_h)})
+    self.idx_keys = {v:k for k, v in self.keys.items()}
+
+    # cache the images -> copy from source (i) to target (t)
+    for _hash, img in zip(all_h, all_i):
+      # i is `UploadedFile` object thus i.name
+      t = os.path.join(self.icache, _hash + ".png")
+      img.save(t)
+
+    # update the embeddings
+    if self.emb is not None:
+      self.emb = np.vstack([self.emb, *all_emb])
+    else:
+      self.emb = np.vstack(all_emb)
+
+    # update the cached files
+    with open(self.f_keys, "wb") as f:
+      pickle.dump(self.keys, f)
+    np.save(self.emb_path, self.emb)
+
+
+  @property
+  def n_images(self):
+    return self.emb.shape[0] if self.emb is not None else 0
 
 
   def text_to_image_similarity(self, images: list, text: list, transpose_flag: bool):
@@ -103,14 +156,13 @@ class CLIP:
     just like how CLIP was intended to be used.
 
     Args:
-        images (list): list of image files
-        text (list): list of text strings
-        transpose_flag (bool): image first or text first priority boolean
+      images (list): list of image files
+      text (list): list of text strings
+      transpose_flag (bool): image first or text first priority boolean
 
     Returns:
-        plt.figure: heatmap for the similarity scores
+      plt.figure: heatmap for the similarity scores
     """
-    
     input_images = preprocess_images(images, self.input_resolution, self.device)
     input_text = preprocess_text(text, self.tokenizer, self.context_length, self.device)
     with torch.no_grad():
@@ -120,29 +172,92 @@ class CLIP:
     output = get_output(result, images, text, transpose_flag)
 
     return output
-  
+
+  @torch.no_grad()
   def text_search(self, text: str, n: int) -> list:
-    """[summary]
+    """search through images based on the input text
 
     Args:
-        text (str): [description]
+      text (str): text string for searching
+      n (int): number of results to return
 
     Returns:
-        list: [description]
+      images (list): return list of iamge
     """
-    pass
+    # get the text features
+    input_text = preprocess_text(text, self.tokenizer, self.context_length, self.device)
+    text_features = self.model.encode_text(input_text).numpy()[-1:]
 
+    # score using dot-product and load the images requires
+    # note that we shift the selection by 1 because 0 is the image itself
+    img_idx = np.argsort(text_features @ self.emb.T)[0][::-1][1:n+1]
+    hash_idx = [self.idx_keys[x] for x in img_idx]
+    images = []
+    for x in hash_idx:
+      fp = os.path.join(self.icache, f"{x}.png")
+      images.append(Image.open(fp))
+    return images
+
+
+  @torch.no_grad()
   def visual_search(self, image: str, n: int) -> list:
-    pass
+    """CLIP.visual encoder model gives out embeddings that can be used for visual
+    similarity. Note: this does not return the perfect similarity but visual similarity.
 
-  def upload_images(self, image: str) -> list:
+    Args:
+      image (str): path to input image
+      n (int): number of results to return
+
+    Returns:
+      images (list): returns list of images
+    """
+    # load image and get the embeddings
+    image = Image.open(image)
+    _hash = Hashlib.sha256(image.tobytes())
+    if _hash not in self.keys:
+      out = prepare_images([image], self.input_resolution).to(self.device)
+      out = self.model.encode_image(out).cpu().numpy()
+      # this looks like a new image, store it
+      self.upate_emb([image], [_hash], [out])
+    else:
+      out = self.emb[self.keys[_hash]].reshape(1, -1)
+
+    # score using dot-product and load the images requires
+    # note that we shift the selection by 1 because 0 is the image itself
+    img_idx = np.argsort(out @ self.emb.T)[0][::-1][1:n+1]
+    hash_idx = [self.idx_keys[x] for x in img_idx]
+    images = []
+    for x in hash_idx:
+      fp = os.path.join(self.icache, f"{x}.png")
+      images.append(Image.open(fp))
+    return images
+
+
+  @torch.no_grad()
+  def upload_images(self, images: list) -> list:
     """uploading simply means processing all these images and creating embeddings
     from this that can then be saved in the 
 
     Args:
-        image (str): [description]
+      images (list): image to cache
 
     Returns:
-        list: [description]
+      list: hash objects of all the files
     """
-    pass
+    # get the hashes for new files only
+    hashes = [Hashlib.sha256(Image.open(x).tobytes()) for x in images]
+    all_i = []; all_h = []
+    for i,h in zip(images,hashes):
+      if h in self.keys:
+        continue
+      all_i.append(i); all_h.append(h)
+    
+    # get the tensors after processing
+    opened_images = [Image.open(i) for i in all_i]
+    out = prepare_images(opened_images, self.input_resolution)
+    out = self.model.encode_image(out).numpy()
+
+    # update and store the new images and hashes
+    self.upate_emb(opened_images, all_h, out)
+
+    return all_h
