@@ -25,7 +25,7 @@ import pickle
 
 from clip.model import build_model
 from clip.tokenizer import SimpleTokenizer
-from clip.utils import preprocess_images, preprocess_text, similarity_score, get_output, prepare_images
+from clip import utils
 
 # fixed
 _MODELS = {
@@ -116,13 +116,18 @@ class CLIP:
     self.idx_keys = {v:k for k, v in keys.items()}
 
 
+  @property
+  def n_images(self):
+    return self.emb.shape[0] if self.emb is not None else 0
+
+
   def upate_emb(self, all_i: list, all_h: list, all_emb: list):
     """Update the embeddings, keys and cache images
 
     Args:
-        all_i (list): list 
-        all_h (list): [description]
-        all_emb (list): [description]
+        all_i (list): list of all opened images
+        all_h (list): list of all hashes for corresponding all_i[j]
+        all_emb (list): list of embeddings for corresponding all_i[j]
     """
     # update the keys
     self.keys.update({k:i+len(self.keys) for i,k in enumerate(all_h)})
@@ -146,11 +151,6 @@ class CLIP:
     np.save(self.emb_path, self.emb)
 
 
-  @property
-  def n_images(self):
-    return self.emb.shape[0] if self.emb is not None else 0
-
-  
   @torch.no_grad()
   def text_to_image_similarity(self, images: list, text: list, transpose_flag: bool):
     """This is the implementation of n-text to m-images similarity checking
@@ -162,16 +162,38 @@ class CLIP:
       transpose_flag (bool): image first or text first priority boolean
 
     Returns:
-      plt.figure: heatmap for the similarity scores
+      (plt.figure): heatmap for the similarity scores
     """
-    input_images = preprocess_images(images, self.input_resolution, self.device)
-    input_text = preprocess_text(text, self.tokenizer, self.context_length, self.device)
+    hashes = [Hashlib.sha256(Image.open(x).tobytes()) for x in images]
+    cached_emb = []; to_proc = []; to_proc_hash = []
+    for i,h in zip(images, hashes):
+      if h in self.keys:
+        cached_emb.append(self.emb[i])
+      else:
+        to_proc.append(Image.open(i))
+        to_proc_hash.append(h)
+
+    # tokenize text and tensorize images and get features for each
+    input_images = utils.prepare_images(to_proc, self.input_resolution, self.device)
+    input_text = self.tokenizer(text, self.context_length, self.device)
     image_features = self.model.encode_image(input_images)
     text_features = self.model.encode_text(input_text)
-    result = similarity_score(image_features, text_features, transpose_flag)
-    output = get_output(result, images, text, transpose_flag)
+    
+    # normalise the features, add the cached ones and get similarity matrix
+    text_features /= text_features.norm(dim=-1, keepdim=True).cpu().numpy()
+    image_features /= image_features.norm(dim=-1, keepdim=True).cpu().numpy()
+    stacked_features = np.vstack([image_features, *cached_emb])
+    if transpose_flag:
+      similarity_matrix = stacked_features @ text_features.T
+    else:
+      similarity_matrix = text_features @ stacked_features.T
+    result = (100.0 * similarity_matrix).softmax(dim=-1)
 
+    # get the final heatmap image and update the embeddings
+    output = utils.get_similarity_heatmap(result, images, text, transpose_flag)
+    self.upate_emb(to_proc, to_proc_hash, image_features)
     return output
+
 
   @torch.no_grad()
   def text_search(self, text: str, n: int) -> list:
@@ -185,20 +207,14 @@ class CLIP:
       images (list): return list of iamge
     """
     # get the text features
-    input_tokens = [
-      self.tokenizer.encoder['<|startoftext|>'],
-      *self.tokenizer.encode(text),
-      self.tokenizer.encoder['<|endoftext|>']
-    ]
-    input_tokens = input_tokens + [0 for _ in range(self.context_length - len(input_tokens))]
-    input_tokens = torch.Tensor(input_tokens).long().unsqueeze(0)
+    input_tokens = self.tokenizer(text, self.context_length, self.device)
     text_features = self.model.encode_text(input_tokens)
     text_features /= text_features.norm(dim=-1, keepdim=True)
     text_features = text_features.numpy()
 
     # score using dot-product and load the images requires
     # note that we shift the selection by 1 because 0 is the image itself
-    img_idx = np.argsort(text_features @ self.emb.T)[0][::-1][1:n+1]
+    img_idx = np.argsort(text_features @ self.emb.T)[0][::-1][:n]
     hash_idx = [self.idx_keys[x] for x in img_idx]
     images = []
     for x in hash_idx:
@@ -223,18 +239,20 @@ class CLIP:
     image = Image.open(image)
     _hash = Hashlib.sha256(image.tobytes())
     if _hash not in self.keys:
-      out = prepare_images([image], self.input_resolution).to(self.device)
+      out = utils.prepare_images([image], self.input_resolution, self.device)
       out = self.model.encode_image(out).cpu()
       out /= out.norm(dim=-1, keepdim=True)
       out = out.numpy()
       # this looks like a new image, store it
       self.upate_emb([image], [_hash], [out])
+      shift = 0
     else:
       out = self.emb[self.keys[_hash]].reshape(1, -1)
+      shift = 1
 
     # score using dot-product and load the images requires
     # note that we shift the selection by 1 because 0 is the image itself
-    img_idx = np.argsort(out @ self.emb.T)[0][::-1][1:n+1]
+    img_idx = np.argsort(out @ self.emb.T)[0][::-1][shift:n+shift]
     hash_idx = [self.idx_keys[x] for x in img_idx]
     images = []
     for x in hash_idx:
@@ -264,7 +282,7 @@ class CLIP:
     
     # get the tensors after processing
     opened_images = [Image.open(i) for i in all_i]
-    out = prepare_images(opened_images, self.input_resolution)
+    out = utils.prepare_images(opened_images, self.input_resolution, self.device)
     out = self.model.encode_image(out)
     out /= out.norm(dim=-1, keepdim=True)
     out = out.numpy()

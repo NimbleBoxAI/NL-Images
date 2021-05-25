@@ -1,10 +1,11 @@
-import os
-import subprocess
 import gzip
 import html
 import ftfy
-from functools import lru_cache
+import torch
 import regex as re
+import numpy as np
+from typing import Union
+from functools import lru_cache
 
 
 @lru_cache()
@@ -118,3 +119,42 @@ class SimpleTokenizer(object):
       token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
       bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
     return bpe_tokens
+
+  def __call__(
+    self, text: Union[str, list],
+    context_length: Union[str, list],
+    device = "cpu"
+  ) -> torch.Tensor:
+    """tokenize the text and return proper tensors
+
+    Args:
+        text (Union[str, list]): text as a string or list of strings
+        context_length (Union[str, list]): sequence length for transformer
+        device (torch.Device): device to load sequence on 
+
+    Returns:
+        (torch.Tensor): input ids for the model
+    """
+    # create tokens array
+    if isinstance(text, list):
+      text_tokens = [self.encode(t) for t in text]
+      text_input = torch.zeros(len(text_tokens), context_length)
+    else:
+      text_tokens = self.encode(text)
+      text_input = np.zeros((1, context_length))
+
+    # convert to proper tokens ids
+    start_token = self.encoder['<|startoftext|>']
+    end_token = self.encoder['<|endoftext|>']
+    if isinstance(text, list):
+      for i, tokens in enumerate(text_tokens):
+        tokens = [start_token] + tokens + [end_token]
+        text_input[i, : len(tokens)] = torch.tensor(tokens)
+    else:
+      tokens = [start_token] + text_tokens + [end_token]
+      text_input[0, :len(tokens)] = tokens
+      text_input = torch.from_numpy(text_input)
+
+    # move to correct device
+    preprocessed_text = text_input.long().to(device)
+    return preprocessed_text
