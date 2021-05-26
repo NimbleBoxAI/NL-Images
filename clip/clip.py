@@ -181,6 +181,16 @@ class CLIP:
 
   @torch.no_grad()
   def text_to_text_similarity(self, memory: list, query: str, n: int = 10):
+    """Text to text similarity for comparing input query to memory.
+
+    Args:
+      memory (list): list of strings for memory
+      query (str): query string
+      n (int, optional): number of items to return. Defaults to 10.
+
+    Returns:
+      (list): return list of matching strings from memory
+    """
     # first all the sequences
     all_sent = memory + [query]
     all_sent = self.tokenizer(all_sent, self.context_length, self.device)
