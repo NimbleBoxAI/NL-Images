@@ -44,8 +44,6 @@ _VOCAB_PATH = 'https://openaipublic.azureedge.net/clip/bpe_simple_vocab_16e6.txt
 def _download(url: str, root: str = os.path.expanduser("~/.cache/clip")):
   os.makedirs(root, exist_ok=True)
   filename = os.path.basename(url)
-
-  expected_sha256 = url.split("/")[-2]
   download_target = os.path.join(root, filename)
 
   if os.path.exists(download_target) and not os.path.isfile(download_target):
