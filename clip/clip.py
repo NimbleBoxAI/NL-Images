@@ -93,7 +93,6 @@ class CLIP:
     # if you find any issue during download we recommend looking at the source code:
     # https://github.com/openai/CLIP/blob/main/clip/clip.py
     mcache = os.path.join(folder(__file__), model_cache_folder)
-    os.makedirs(mcache, exist_ok=True)
 
     if image_model in _MODELS:
         model_path = _download(_MODELS[image_model], mcache)
