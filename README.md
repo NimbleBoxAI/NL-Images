@@ -4,7 +4,7 @@ NL-Images uses Cross-Modal-Search models to predict the similarity between given
 - [`clip/`](./clip/): CLIP (Contrastive Language-Image Pre-Training) is a neural network that consists of a image encoder and a text encoder. Given an image, it predicts the most relevant text and vice versa.
 
 Files:
-- `run.py`: streamlit webapp for simple ranking of text to iamges.
+- `run.py`: streamlit webapp for simple ranking of text to images.
 - `search_vis.py`: streamlit webapp for searching and similarity demo.
 
 ### Usage

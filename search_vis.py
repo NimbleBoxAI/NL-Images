@@ -22,7 +22,7 @@ Find images using text and yes, there's an easter egg.
 
 app_mode = st.sidebar.selectbox(
   'Please select tasks',
-  ["Text Search", "Image Search"]
+  ["Text Search", "Image Search", "Text to Text Similarity"]
 )
 
 st.write('''Upload more images to cache, if you want to add more!''')
@@ -37,6 +37,7 @@ if st.button("Upload") and len(images):
 n_images = st.slider('Number of images to see', min_value=1, max_value = model.n_images)
 
 if app_mode == "Image Search":
+  st.write('''### Image Search''')
   st.write(f"Upload any image for similarity search. Searching {n_images} images!")
   image = st.file_uploader("Images", accept_multiple_files=False, type=['png', 'jpg', 'jpeg'])
   if st.button("Process") and image:
@@ -45,8 +46,29 @@ if app_mode == "Image Search":
       st.image(x)
 
 elif app_mode == "Text Search":
+  st.write('''### Text Search''')
   text = st.text_input(f"Add the text to search. Searching {n_images} images!")
   if st.button("Process") and text:
     out = model.text_search(text, n_images)
     for x in out:
       st.image(x)
+
+elif app_mode == "Text to Text Similarity":
+  st.write('''### Text to Text Similarity
+  
+This requires two different inputs, first is the memory against which to check
+the second input query.''')
+
+  default_ = '''How can I sample from the EMNIST letters dataset?
+Simple, efficient way to create Dataset?
+How to use multiple models to perform inference on same data in parallel?
+Get target list from Dataset
+Sparse dataset and dataloader
+Element-Wise Max Between Two Tensors?'''
+  memory = st.text_area("Memory", value=default_)
+  query = st.text_input("Query", value="Can I run mulitple models in parallel?")
+  matches = model.text_to_text_similarity(memory.split("\n"), query)
+
+  if st.button("Process"):
+    st.write("**Query**: " + query)
+    st.write("\n".join([f"- {m}" for m in matches]))

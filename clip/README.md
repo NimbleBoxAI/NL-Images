@@ -8,7 +8,7 @@ Files:
 
 ## Documentation
 
-### `CLIP`
+## `CLIP`
 
 ```python
 class CLIP:
@@ -40,9 +40,9 @@ def upate_emb(self, all_i: list, all_h: list, all_emb: list):
   """Update the embeddings, keys and cache images
 
   Args:
-      all_i (list): list 
-      all_h (list): [description]
-      all_emb (list): [description]
+    all_i (list): list of all opened images
+    all_h (list): list of all hashes for corresponding all_i[j]
+    all_emb (list): list of embeddings for corresponding all_i[j]
   """
 ```
 
@@ -106,5 +106,49 @@ def upload_images(self, images: list) -> list:
 
   Returns:
     list: hash objects of all the files
+  """
+```
+
+### `CLIP.text_to_text_similarity`
+
+```python
+def text_to_text_similarity(self, memory: list, query: str, n: int = 10):
+  """Text to text similarity for comparing input query to memory.
+
+  Args:
+    memory (list): list of strings for memory
+    query (str): query string
+    n (int, optional): number of items to return. Defaults to 10.
+
+  Returns:
+    (list): return list of matching strings from memory
+  """
+```
+
+### `Tokenizer`
+
+```python
+class SimpleTokenizer(object):
+  def __init__(self, bpe_path: str = "./vocab/bpe_simple_vocab_16e6.txt.gz"):
+```
+
+
+### `Tokenizer.__call__`
+
+```python
+def __call__(
+  self, text: Union[str, list],
+  context_length: Union[str, list],
+  device = "cpu"
+) -> torch.Tensor:
+  """tokenize the text and return proper tensors
+
+  Args:
+      text (Union[str, list]): text as a string or list of strings
+      context_length (Union[str, list]): sequence length for transformer
+      device (torch.Device): device to load sequence on 
+
+  Returns:
+      (torch.Tensor): input ids for the model
   """
 ```

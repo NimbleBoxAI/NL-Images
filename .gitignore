@@ -134,3 +134,4 @@ clip/.cache_model
 .DS_Store
 daily.py
 sample_images/
+*.ipynb

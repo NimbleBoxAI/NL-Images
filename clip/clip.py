@@ -17,6 +17,9 @@ except ImportError as e:
 import os
 import subprocess
 
+import urllib
+from tqdm import tqdm
+
 from PIL import Image
 import torch
 
@@ -35,6 +38,31 @@ _MODELS = {
   "ViT-B/32": "https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
 }
 _VOCAB_PATH = 'https://openaipublic.azureedge.net/clip/bpe_simple_vocab_16e6.txt.gz'
+
+
+# download function
+def _download(url: str, root: str = os.path.expanduser("~/.cache/clip")):
+  os.makedirs(root, exist_ok=True)
+  filename = os.path.basename(url)
+  download_target = os.path.join(root, filename)
+
+  if os.path.exists(download_target) and not os.path.isfile(download_target):
+    raise RuntimeError(f"{download_target} exists and is not a regular file")
+
+  if os.path.isfile(download_target):
+      return download_target
+
+  with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
+    with tqdm(total=int(source.info().get("Content-Length")), ncols=80, unit='iB', unit_scale=True) as loop:
+      while True:
+        buffer = source.read(8192)
+        if not buffer:
+          break
+
+        output.write(buffer)
+        loop.update(len(buffer))
+
+  return download_target
 
 # functions
 class CLIP:
@@ -63,14 +91,15 @@ class CLIP:
     # if you find any issue during download we recommend looking at the source code:
     # https://github.com/openai/CLIP/blob/main/clip/clip.py
     mcache = os.path.join(folder(__file__), model_cache_folder)
-    os.makedirs(mcache, exist_ok=True)
-    model_path = os.path.join(mcache, f"{image_model}.pt")
-    vocab_path = os.path.join(mcache, f"bpe_simple_vocab_16e6.txt.gz")
 
-    if not os.path.exists(model_path):
-      subprocess.call(['wget', _MODELS[image_model], '-O', model_path])
-    if not os.path.exists(vocab_path):
-      subprocess.call(['wget', _VOCAB_PATH, '-O', vocab_path, ])
+    if image_model in _MODELS:
+        model_path = _download(_MODELS[image_model], mcache)
+    elif os.path.isfile(image_model):
+        model_path = image_model
+    else:
+        raise RuntimeError(f"Model {image_model} not found; available models = {_MODELS.keys()}")
+
+    vocab_path = _download(_VOCAB_PATH, mcache)
 
     # the model was saved with CUDA and so it cannot be loaded directly on CPU
     # note: this is why we are using self.device tag for this. Moreover when loading
@@ -103,7 +132,7 @@ class CLIP:
       keys = {}
     else:
       emb = np.load(emb_path)
-      with open(f_keys, "rb") as f: 
+      with open(f_keys, "rb") as f:
         keys = pickle.load(f)
       print("Loaded", emb.shape, "embeddings")
       print("Loaded", len(keys), "keys")
@@ -150,6 +179,32 @@ class CLIP:
       pickle.dump(self.keys, f)
     np.save(self.emb_path, self.emb)
 
+  @torch.no_grad()
+  def text_to_text_similarity(self, memory: list, query: str, n: int = 10):
+    """Text to text similarity for comparing input query to memory.
+
+    Args:
+      memory (list): list of strings for memory
+      query (str): query string
+      n (int, optional): number of items to return. Defaults to 10.
+
+    Returns:
+      (list): return list of matching strings from memory
+    """
+    # first all the sequences
+    all_sent = memory + [query]
+    all_sent = self.tokenizer(all_sent, self.context_length, self.device)
+    feat = self.model.encode_text(all_sent)
+    feat /= feat.norm(dim=-1, keepdim=True).cpu()
+    feat = feat.numpy()
+
+    # next process the query
+    memory_emb, query = feat[:-1], feat[-1]
+    out_idx = np.argsort(query @ memory_emb.T)[::-1][:n]
+    matches = [memory[i] for i in out_idx]
+
+    return matches
+
 
   @torch.no_grad()
   def text_to_image_similarity(self, images: list, text: list, transpose_flag: bool):
@@ -178,7 +233,7 @@ class CLIP:
     input_text = self.tokenizer(text, self.context_length, self.device)
     image_features = self.model.encode_image(input_images)
     text_features = self.model.encode_text(input_text)
-    
+
     # normalise the features, add the cached ones and get similarity matrix
     text_features /= text_features.norm(dim=-1, keepdim=True).cpu().numpy()
     image_features /= image_features.norm(dim=-1, keepdim=True).cpu().numpy()
@@ -264,7 +319,7 @@ class CLIP:
   @torch.no_grad()
   def upload_images(self, images: list) -> list:
     """uploading simply means processing all these images and creating embeddings
-    from this that can then be saved in the 
+    from this that can then be saved in the
 
     Args:
       images (list): image to cache
@@ -279,7 +334,7 @@ class CLIP:
       if h in self.keys:
         continue
       all_i.append(i); all_h.append(h)
-    
+
     # get the tensors after processing
     opened_images = [Image.open(i) for i in all_i]
     out = utils.prepare_images(opened_images, self.input_resolution, self.device)
