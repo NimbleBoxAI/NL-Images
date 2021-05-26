@@ -150,6 +150,22 @@ class CLIP:
       pickle.dump(self.keys, f)
     np.save(self.emb_path, self.emb)
 
+  @torch.no_grad()
+  def text_to_text_similarity(self, memory: list, query: str, n: int = 10):
+    # first all the sequences
+    all_sent = memory + [query]
+    all_sent = self.tokenizer(all_sent, self.context_length, self.device)
+    feat = self.model.encode_text(all_sent)
+    feat /= feat.norm(dim=-1, keepdim=True).cpu()
+    feat = feat.numpy()
+
+    # next process the query
+    memory_emb, query = feat[:-1], feat[-1]
+    out_idx = np.argsort(query @ memory_emb.T)[::-1][:n]
+    matches = [memory[i] for i in out_idx]
+
+    return matches
+
 
   @torch.no_grad()
   def text_to_image_similarity(self, images: list, text: list, transpose_flag: bool):
