@@ -1,7 +1,5 @@
 import streamlit as st
 
-from clip.utils import get_images
-
 # this caches the output to store the output and not call this function again
 # and again preventing time wastage. `allow_output_mutation = True` tells the
 # function to not hash the output of this function and we can get away with it
@@ -10,59 +8,67 @@ from clip.utils import get_images
 @st.cache(allow_output_mutation=True, show_spinner=False)
 def get_cross_modal_search_models():
   from clip.clip import CLIP
-  return {
-    'CLIP': CLIP()
-  }
+  return CLIP()
 
 # load all the models before the app starts
-with st.spinner('Downloading and Loading Model with Vocabulary...'):
-  MODELS = get_cross_modal_search_models()
+with st.spinner('Loading Model with Vocabulary ... (might take sometime)'):
+  model = get_cross_modal_search_models()
 
-st.write('''
-# NL-Images
-CLIP is used to perform Cross Modal Search:
-- CLIP: CLIP (Contrastive Language-Image Pre-Training) is a neural network that
-consists of a image encoder and a text encoder. It predicts the similarity between
-the given images and textual descriptions.
+st.write(f'''
+# Image Searching App
+
+Find images using text and yes, there's an easter egg.
 ''')
 
-model_name = st.sidebar.selectbox(
-  'Please select your app',
-  ["CLIP"]
+app_mode = st.sidebar.selectbox(
+  'Please select tasks',
+  ["Text Search", "Image Search", "Text to Text Similarity"]
 )
 
-if model_name != "CLIP":
-  st.write("Use `CLIP` model!")
-  model = MODELS['CLIP']
+st.write('''Upload more images to cache, if you want to add more!''')
+images = st.file_uploader("Images", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
-if model_name == "CLIP":
-  st.write("### `CLIP` Model")
-  st.write("Please upload images and write text of your choice")
-  st.write("Note: Write each description in a new line")
-  model = MODELS['CLIP']
+if st.button("Upload") and len(images):
+  out = model.upload_images(images)
+  st.write(out)
+  st.write(f'''{model.n_images}''')
 
-images = st.file_uploader("Images", accept_multiple_files=True, type=['png', 'jpg'])
+# slider to select the number of images to display
+n_images = st.slider('Number of images to see', min_value=1, max_value = model.n_images)
 
-if len(images) != 0:
-  images, image_grid = get_images(images)
-  st.image(image_grid)
+if app_mode == "Image Search":
+  st.write('''### Image Search''')
+  st.write(f"Upload any image for similarity search. Searching {n_images} images!")
+  image = st.file_uploader("Images", accept_multiple_files=False, type=['png', 'jpg', 'jpeg'])
+  if st.button("Process") and image:
+    out = model.visual_search(image, n_images)
+    for x in out:
+      st.image(x)
 
-default_ = "a person stuck in traffic\na apple on the table\na garden of sunflowers"
-text = st.text_area("Text", value=default_, key="Text")
-text = text.splitlines()
+elif app_mode == "Text Search":
+  st.write('''### Text Search''')
+  text = st.text_input(f"Add the text to search. Searching {n_images} images!")
+  if st.button("Process") and text:
+    out = model.text_search(text, n_images)
+    for x in out:
+      st.image(x)
 
-# `transpose_flag` tells against which input, should softmax be calculated
-# ie. if transpose_flag = False -> sum(text[i]) == 1 but sum(images[i]) != 1
-# ie. if transpose_flag = True  -> sum(text[i]) != 1 but sum(images[i]) == 1
-transpose_flag = st.radio('Priority', ['Image', 'Text'])
-if len(images) == 1:
-  transpose_flag = True
-elif len(text) == 1:
-  transpose_flag = False
-else:
-  transpose_flag = True if transpose_flag == 'Image' else False
+elif app_mode == "Text to Text Similarity":
+  st.write('''### Text to Text Similarity
+  
+This requires two different inputs, first is the memory against which to check
+the second input query.''')
 
-if st.button("Predict"):
-  with st.spinner('Predicting...'):
-    output = model.eval(images, text, transpose_flag)
-  st.write(output)
+  default_ = '''How can I sample from the EMNIST letters dataset?
+Simple, efficient way to create Dataset?
+How to use multiple models to perform inference on same data in parallel?
+Get target list from Dataset
+Sparse dataset and dataloader
+Element-Wise Max Between Two Tensors?'''
+  memory = st.text_area("Memory", value=default_)
+  query = st.text_input("Query", value="Can I run mulitple models in parallel?")
+  matches = model.text_to_text_similarity(memory.split("\n"), query)
+
+  if st.button("Process"):
+    st.write("**Query**: " + query)
+    st.write("\n".join([f"- {m}" for m in matches]))
