@@ -3,16 +3,7 @@
 # Modified by NimbleBox.ai
 
 # files with a bunch of helper functions
-try:
-  from daily import *
-except ImportError as e:
-  import requests
-  x = requests.get(
-    "https://gist.githubusercontent.com/yashbonde/62df9d16858a43775c22a6af00a8d707/raw/0764da94f5e243b2bca983a94d5d6a4e4a7eb28a/daily.py"
-  )
-  with open("daily.py", "wb") as f:
-    f.write(x.content)
-  from daily import *
+from .daily import *
 
 import os
 import subprocess
